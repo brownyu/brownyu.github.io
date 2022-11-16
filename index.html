@@ -5,7 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DSA 306</title>
 </head>
+<style>
+    h2.title {
+        text-align: center;
+    }
+    small {
+    display: inline-block;
+    }
+</style>
 <body>
-    <h2> Here is the DSA 306 Group project to predict the student dropout</h2>
+    <h2 class="title"> Here is the DSA 306 Big data analytics group project to predict the student dropout</h2>
+    <h4>Project Report: Predict Student's Dropout and academic success</h4>
+    <p>
+    <a href="https://github.com/brownyu/brownyu.github.io">R code and dataset is available at this github page</a>
+    </p>
+    <div>
+        <p>Group members are</p>
+            <li>Brain Lim</li>
+            <li>Eugene Wong </li>
+            <li>Tan Gong Chuen </li>  
+            <li>Zhao Siyu</li>
+    </div>
+
+    <p> Our project could be viewed in several parts</p>
+    <ol>
+        <li>Introduction</li>
+        <li>Data set overview</li>
+        <li>Data wrangling in Spark</li>
+        <li>EDA</li>
+        <li>Modelling in Spark</li>
+        <li>Conclusion</li>
+    </ol> 
+    <h4>1.Introduction</h4>
+    <p>The dataset was donated by a group of researchers from Portugal who were studying dropout rates and academic performance among undergraduate students from a higher education institution. 
+        The dataset includes a wide range of variables like the course enrolled, the student demographics, and other social-economic factors. 
+        We wanted to find a model that can perform a decent job at estimating the likelihood that a student will drop out. As such, the model can provide the school a better idea of which students of theirs are more prone to dropout. With the information at hand, the school may carry out early intervention and support for vulnerable students in order to curb dropout rates.  
+    </p>
+    <h4>2.Data set overview</h4>
+    <p>The data is based on a higher education institution in Portugal and obtained through SATDAP – Support System for the Digital Transformation of Public Administration (SAMA2020). The data has been preprocessed to handle data from anomalies, unexplainable outliers and missing values, resulting in 4424 instances. The data also contains 37 variables. The variables include 5 continuous variables and 32 categorical / discrete variables.</p>
+
+    <h4>3.Data Wrangling in Spark</h4>
+    <p>The parquet file was first loaded into RStudio using spark_read_parquet(). The data came in extremely messy without the numbers neatly divided into columns</p>
+    <p>We used filter() to filter out the “Enrolled” observations from the target variable as it is undetermined whether these students will drop out or not. After which, we used mutate() and as.numeric() to create a new column (isDropout) where 1 is assigned to those who dropped out and 0 to those who graduated.</p>
+
+    <h4>4.EDA</h4>
+    <h5>Distribution of some independent variables</h5>
+    <ol>
+        <li>Marital Status</li>
+        <div>
+        <img src="./images/maritalstatus.jpg"  class="inline" >
+        </div>
+
+        <li>Data set overview</li>
+        <li>Data wrangling in Spark</li>
+        <li>EDA</li>
+        <li>Modelling in Spark</li>
+        <li>Conclusion</li>
+    </ol> 
+
+
+
+
+
+
 </body>
 </html>
