@@ -93,6 +93,7 @@
     <h5>Pipeline</h5>
     <p> we made use of a pipeline which contains ft_vector_assembler() and ft_standard_scaler() to scale them. Subsequently, we would combine standardised variables with categorical variables using vector assembler again, which are passed into ml_logistic_regression() to regress isDropout against all independent variables. 
     </p>
+    <img src="./images/pipeline.JPG"  class="inline" >
     <h5>Logistic Regression Modelling</h5>
     <p>Before modelling, we split the data into a training and testing set using a 8:2 ratio with seed = 888. Then, we fitted the pipeline onto the training set and used it to transform and get predictions on the testing set. The measure that we used to compare models will be the “area under the ROC curve” </p>
     <h5>Model with all variables</h5>
