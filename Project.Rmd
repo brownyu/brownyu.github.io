@@ -1568,8 +1568,8 @@ pipeline <- ml_pipeline(sc) |>
   ml_logistic_regression(
     features_col = "features_scaledall", 
     label_col = "isDropout",
-    elastic_net_param = 0.75,
-    reg_param = 0.005
+    elastic_net_param = 0.6,
+    reg_param = 0.004
 )
 
 pipeline_modelbest <- ml_fit(pipeline, dropout_train)

@@ -22,7 +22,7 @@
     </p>
     <div>
         <p>Group members are</p>
-            <li>Brain Lim</li>
+            <li>Brian Lim</li>
             <li>Eugene Wong </li>
             <li>Tan Gong Chuen </li>  
             <li>Zhao Siyu</li>
@@ -99,8 +99,7 @@
     <h5>Model with all variables</h5>
     <p>We first plugged all the variables into a logistic regression and we will use this model as a benchmark model for comparison. The benchmark model has an area under the ROC curve of 0.9295625.</p>
     <h5>Model with all variables with Elastic net regularisation</h5>
-    <p>Regularisation helps tune the coefficients of each variable and allocates more weights to the variables that actually matter. 
-        To find the best hyperparameter value, α and lambda, for the elastic net regularisation, we made use of ml_cross_validator() to perform 10 folds CV and tested a range of values elastic_net_param = c(0.25,0.4,0.5,0.6,0.75,0.8,0.85), and reg_param = c(seq(0.001,0.01,by = 0.001)) on the training set. We then evaluate and select the best combination of hyperparameter values with the highest ROC. From our results, the best combination is elastic_net_param = 0.75, with reg_param = 0.005. The area under ROC for this selected elastic net regularised logistic regression model is 0.9459816</p>
+    <p> To find the best hyperparameter value, α and lambda, for the elastic net regularisation, we made use of ml_cross_validator() to perform 10 folds CV and tested a range of values elastic_net_param = c(0.25,0.4,0.5,0.6,0.75,0.8,0.85), and reg_param = c(seq(0.001,0.01,by = 0.001)) on the training set. We then evaluate and select the best combination of hyperparameter values with the highest ROC. From our results, the best combination is elastic_net_param = 0.6, with reg_param = 0.004. The area under ROC for this selected elastic net regularised logistic regression model is 0.9441253 when used to predict on the testing data. </p>
     <h5>Model with selected variables</h5>
     <p> Further data wrangling in this model by summation various curricular units from two semesters together. Cross-validation and elastic net regularization is also used in this model, to tune the best parameters. The model has an area under ROC of 0.9494767 in testing data </p>
     <h4>6.Conclusion</h4>
