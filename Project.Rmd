@@ -1,0 +1,1830 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+---
+title: "Big Data Code"
+output: html_document
+date: "2022-11-14"
+---
+
+
+
+
+
+---
+title: "Project R Codes"
+output: html_document
+date: "2022-10-09"
+---
+
+Converting csv file downloaded into parquet
+```{r}
+library(tidyr)
+library(sparklyr)
+
+#setwd("~/Desktop/Big Data Analytics/Project")
+data1 <- read.csv("data.csv")
+
+names(data1)
+sc <- spark_connect(master = "local", version = "3.3.0")
+dropout <- spark_read_csv(
+  sc,
+  names = "dropout",
+  path = paste0(getwd(), "/data.csv"),
+  memory = FALSE
+)
+
+spark_write_parquet(dropout, path = "dropout.parquet")
+
+spark_disconnect(sc)
+
+
+
+
+```
+
+Load Parquet File and Tidy up Data
+```{r}
+library(tidyr)
+library(sparklyr)
+library(dplyr)
+
+setwd("C:/Users/Eugene Wong/Desktop/SMU/Big Data/Project")
+sc <- spark_connect(master = "local", version = "3.3.0")
+dropout <- spark_read_parquet(sc,
+                   name = "dropout",
+                   path = paste0(getwd(), "/dropout.parquet"),
+                   memory = FALSE)
+
+dropout
+
+
+#Seperate the data into Columns and Give Proper Headers
+dropout <- separate(dropout, col = colnames(dropout),
+                into = c("Marital status", "Application mode", "Application order",
+                         "Course","Daytime/evening attendance","Previous qualification",
+                         "Previous qualification (grade)","Nacionality",
+                         "Mother's qualification", "Father's qualification",
+                         "Mother's occupation", "Father's occupation",
+                         "Admission grade", "Displaced", "Educational special needs",
+                         "Debtor", "Tuition fees up to date", "Gender",
+                         "Scholarship holder", "Age at enrollment","International",
+                         "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP","Target"),
+         sep = ";")
+dropout <- dropout |>
+  mutate_at(c("Previous qualification (grade)","Admission grade", "Age at enrollment",
+              "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP"),
+              as.numeric)
+dropout
+```
+
+Filter out Enrolled in Target Column. Assign 1 to Graduated and 0 to dropout
+```{r}
+
+#Filter Out Enrolled
+dropout <- dropout |> 
+  filter(Target != "Enrolled")
+dropout <- dropout |> 
+  mutate(isDropout = as.numeric(Target == "Dropout")) 
+dropout
+
+#Number of observations removed (794/4424)
+dropout |> 
+  group_by(Target) |> 
+  summarize(num = n())
+#Dropout = 1421 vs Graduate = 2209
+
+```
+
+Study the Data
+Marital Status
+```{r}
+library(ggplot2)
+library(dbplot)
+library(gridExtra)
+#not sure if we have to do a test to see if its significant to add into model or do we just see the significance in the model
+
+#Marital Status
+
+plot_martial1 <- dropout |> 
+  group_by(`Marital status`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Marital status`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Marital status Distribution", y="Count")
+
+prop_marital <- dropout |> 
+  group_by(`Marital status`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Marital status`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_martial2 <- prop_marital |> 
+  ggplot(aes(x = `Marital status`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_marital$prop * prop_marital$count) / sum(prop_marital$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Marital Status Dropout Proportion", y="Proportion")
+prop_marital
+grid.arrange(plot_martial1,plot_martial2)
+#Marital Status is largely dominated by Single it is difficult to identify a relationship
+#6 (Legally separated) have a high proportion but there is extremely little observations
+```
+Application Mode
+```{r}
+plot_applicationmode1 <- dropout |>
+  group_by(`Application mode`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Application mode`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Application Mode Distribution", y="Count")
+
+prop_Applicationmode <- dropout |> 
+  group_by(`Application mode`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Application mode`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>
+  collect()
+plot_applicationmode2 <- prop_Applicationmode |> 
+  ggplot(aes(x = `Application mode`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_Applicationmode$prop * prop_Applicationmode$count) / sum(prop_Applicationmode$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Application Mode Dropout Proportion", y="Proportion")
+prop_Applicationmode
+grid.arrange(plot_applicationmode1,plot_applicationmode2)
+#Holder of higher courses also have a high proportion of drop out but is only a small part of the observation
+```
+
+Application Order
+```{r}
+plot_applicationorder1 <- dropout |>
+  group_by(`Application order`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Application order`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Application Order Distribution", y="Count")
+
+prop_applicationorder <- dropout |> 
+  group_by(`Application order`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Application order`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_applicationorder2 <- prop_applicationorder |> 
+  ggplot(aes(x = `Application order`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_applicationorder$prop * prop_applicationorder$count) / sum(prop_applicationorder$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Application Order Dropout Proportion", y="Proportion")
+prop_applicationorder
+grid.arrange(plot_applicationorder1,plot_applicationorder2)
+#The distributions of proportions is relatively similar below the proportion of 0.5
+```
+
+*Course*
+```{r}
+plot_course1 <- dropout |>
+  group_by(Course, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=Course, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Course Distribution", y="Count")
+
+prop_Course <- dropout |> 
+  group_by(Course, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(Course) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>
+  collect()
+plot_course2 <- prop_Course |> 
+  ggplot(aes(x = Course, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_Course$prop * prop_Course$count) / sum(prop_Course$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Course Dropout Proportion", y="Proportion")
+prop_Course
+grid.arrange(plot_course1,plot_course2)
+#Based on proportion plot, courses 9119, 9130, 9991, 9853 seems to be if interest
+```
+
+Daytime/evening Attendance
+```{r}
+plot_attendance1 <- dropout |>
+  group_by(`Daytime/evening attendance`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Daytime/evening attendance`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Daytime/evening attendance Distribution", y="Count")
+
+prop_dayattendance <- dropout |> 
+  group_by(`Daytime/evening attendance`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Daytime/evening attendance`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_attendance2 <- prop_dayattendance |> 
+  ggplot(aes(x = `Daytime/evening attendance`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_dayattendance$prop * prop_dayattendance$count) / sum(prop_dayattendance$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Daytime/evening attendance Dropout Proportion", y="Proportion")
+prop_dayattendance
+grid.arrange(plot_attendance1,plot_attendance2)
+#The dropout proportions are below or close to 0.5 so it is not a useful indicator
+```
+
+Previous Qualification
+```{r}
+plot_prevqualification1 <- dropout |>
+  group_by(`Previous qualification`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Previous qualification`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Previous qualification Distribution", y="Count")
+
+prop_prevqualification <- dropout |> 
+  group_by(`Previous qualification`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Previous qualification`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_prevqualification2 <- prop_prevqualification |> 
+  ggplot(aes(x = `Previous qualification`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_prevqualification$prop * prop_prevqualification$count) / sum(prop_prevqualification$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Previous Qualification Dropout Proportion", y="Proportion")
+prop_prevqualification
+grid.arrange(plot_prevqualification1,plot_prevqualification2)
+#Largely coming from secondary education so it is difficult to identify a relationship
+#Maybe use 19 (basic education 3rd cycle) and 3 (Higher education)
+```
+
+Previous Qualification (Grade)
+```{r}
+plot_prevgrade1 <- dropout |>
+  group_by(`Previous qualification (grade)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Previous qualification (grade)`, y=n, color=Target))+
+  geom_line()+
+  labs(title="Previous qualification Distribution", y="Count")
+plot_prevgrade2 <- dropout |> 
+  dbplot_raster(x = `Previous qualification (grade)`, y=isDropout, fill = n(), resolution = 20)
+prop_prevqualificationgrade <- dropout |> 
+  group_by(`Previous qualification (grade)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Previous qualification (grade)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_prevgrade3 <- prop_prevqualificationgrade |> 
+  ggplot(aes(x = `Previous qualification (grade)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_prevqualificationgrade$prop * prop_prevqualificationgrade$count) / sum(prop_prevqualificationgrade$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Previous Qualification (Grade) Dropout Proportion", y="Proportion")
+prop_prevqualificationgrade
+grid.arrange(plot_prevgrade1,plot_prevgrade2,plot_prevgrade3)
+#A higher number of dropouts for lower qualification grade
+#What is a better way to plot this. Currently it coverts the continuous variable into discrete so the axis is messed up
+```
+
+Nationality
+```{r}
+plot_nacionality1 <- dropout |>
+  group_by(Nacionality, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=Nacionality, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Nationality Distribution", y="Count")
+
+prop_nacionality <- dropout |> 
+  group_by(`Nacionality`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Nacionality`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_nacionality2 <- prop_nacionality |> 
+  ggplot(aes(x = `Nacionality`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_nacionality$prop * prop_nacionality$count) / sum(prop_nacionality$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Nationality Dropout Proportion", y="Proportion")
+prop_nacionality
+grid.arrange(plot_nacionality1,plot_nacionality2)
+#Mostly Portuguese so its not an important variable and proportions are about 0.5 and below
+```
+
+Mother's qualification
+```{r}
+plot_motherqual1 <- dropout |>
+  group_by(`Mother's qualification`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Mother's qualification`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Mother's qualification Distribution", y="Count")
+
+prop_motherqualification <- dropout |> 
+  group_by(`Mother's qualification`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Mother's qualification`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_motherqual2 <- prop_motherqualification |> 
+  ggplot(aes(x = `Mother's qualification`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_motherqualification$prop * prop_motherqualification$count) / sum(prop_motherqualification$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Mother's Qualification Dropout Proportion", y="Proportion")
+prop_motherqualification
+grid.arrange(plot_motherqual1,plot_motherqual2)
+#Seems like 34 (unknown) is a good indicator since it has a high proportion and large number of observations. Potentially 37 (basic education 1st cycle) as well
+```
+
+Father's qualification
+```{r}
+plot_fatherqual1 <- dropout |>
+  group_by(`Father's qualification`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Father's qualification`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Father's qualification Distribution", y="Count")
+
+prop_fatherqualification <- dropout |> 
+  group_by(`Father's qualification`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Father's qualification`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_fatherqual2 <- prop_fatherqualification |> 
+  ggplot(aes(x = `Father's qualification`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_fatherqualification$prop * prop_fatherqualification$count) / sum(prop_fatherqualification$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Father's Qualification Dropout Proportion", y="Proportion")
+prop_fatherqualification
+grid.arrange(plot_fatherqual1,plot_fatherqual2)
+#Seems like 34 (unknown) is a good indicator since it has a high proportion and relatively large number of observations.
+```
+
+Mother's occupation
+```{r}
+plot_motheroccupation1<- dropout |>
+  group_by(`Mother's occupation`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Mother's occupation`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Mother's occupation Distribution", y="Count")
+
+prop_motheroccupation <- dropout |> 
+  group_by(`Mother's occupation`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Mother's occupation`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_motheroccupation2 <- prop_motheroccupation |> 
+  ggplot(aes(x = `Mother's occupation`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_motheroccupation$prop * prop_motheroccupation$count) / sum(prop_motheroccupation$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Mother's Occupation Dropout Proportion", y="Proportion")
+prop_motheroccupation
+grid.arrange(plot_motheroccupation1,plot_motheroccupation2)
+#only 0, 90 and 99 have high proportions but they have very few observations.
+```
+
+Father's occupation
+```{r}
+plot_fatheroccupation1 <- dropout |>
+  group_by(`Father's occupation`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Father's occupation`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Father's occupation Distribution", y="Count")
+
+prop_fatheroccupation <- dropout |> 
+  group_by(`Father's occupation`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Father's occupation`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_fatheroccupation2 <- prop_fatheroccupation |> 
+  ggplot(aes(x = `Father's occupation`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_fatheroccupation$prop * prop_fatheroccupation$count) / sum(prop_fatheroccupation$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Father's Occupation Dropout Proportion", y="Proportion")
+prop_fatheroccupation
+grid.arrange(plot_fatheroccupation1,plot_fatheroccupation2)
+#only 0, 90 and 99 have high proportions but 90 and 99 have very few observations.
+```
+
+*Admission Grade*
+```{r}
+plot_admissiongrade1 <- dropout |>
+  group_by(`Admission grade`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Admission grade`, y=n, color=Target))+
+  geom_point()+
+  labs(title="Admission Grade Distribution", y="Count")
+
+plot_admissiongrade2 <- dropout |> 
+  dbplot_raster(x = `Admission grade`, y=isDropout, fill = n(), resolution = 20)
+prop_admissiongrade <- dropout |> 
+  group_by(`Admission grade`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Admission grade`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+prop_admissiongrade
+grid.arrange(plot_admissiongrade1,plot_admissiongrade2)
+#Visually, there seems to be a higher proportion of dropouts for lower grades
+```
+
+Displaced
+```{r}
+plot_displaced1 <- dropout |>
+  group_by(Displaced, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=Displaced, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Displaced Distribution", y="Count")
+
+prop_displaced <- dropout |> 
+  group_by(Displaced, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(Displaced) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_displaced2 <- prop_displaced |> 
+  ggplot(aes(x = Displaced, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_displaced$prop * prop_displaced$count) / sum(prop_displaced$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Displaced Dropout Proportion", y="Proportion")
+prop_displaced
+grid.arrange(plot_displaced1,plot_displaced2)
+#Not displaced has an impact but it is about 45% only so might not be a significant variable
+```
+
+Educational Special Needs
+```{r}
+plot_specialneeds1 <- dropout |>
+  group_by(`Educational special needs`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Educational special needs`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Educational special needs Distribution", y="Count")
+
+prop_specialneeds <- dropout |> 
+  group_by(`Educational special needs`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Educational special needs`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_specialneeds2 <- prop_specialneeds |> 
+  ggplot(aes(x = `Educational special needs`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_specialneeds$prop * prop_specialneeds$count) / sum(prop_specialneeds$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Education Special Needs Dropout Proportion", y="Proportion")
+prop_specialneeds
+grid.arrange(plot_specialneeds1,plot_specialneeds2)
+#Mostly have no educational special needs and under 0.5 dropout proportion
+```
+
+Debtor
+```{r}
+plot_debtor1 <- dropout |>
+  group_by(Debtor, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=Debtor, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Debtor Distribution", y="Count")
+
+prop_debtor <- dropout |> 
+  group_by(Debtor, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(Debtor) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_debtor2 <- prop_debtor |> 
+  ggplot(aes(x = Debtor, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_debtor$prop * prop_debtor$count) / sum(prop_debtor$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Debtor Dropout Proportion", y="Proportion")
+prop_debtor
+grid.arrange(plot_debtor1,plot_debtor2)
+#Although a large number of observations are non-debtor, the proportion of dropouts in debtor is extremely high
+```
+
+Tuition fees up to date
+```{r}
+plot_tuitionfees1 <- dropout |>
+  group_by(`Tuition fees up to date`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Tuition fees up to date`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Tuition fees up to date Distribution", y="Count")
+
+prop_tuitionfees <- dropout |> 
+  group_by(`Tuition fees up to date`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Tuition fees up to date`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_tuitionfees2 <- prop_tuitionfees |> 
+  ggplot(aes(x = `Tuition fees up to date`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_tuitionfees$prop * prop_tuitionfees$count) / sum(prop_tuitionfees$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Tuition Fees Up To Date Dropout Proportion", y="Proportion")
+prop_tuitionfees
+grid.arrange(plot_tuitionfees1,plot_tuitionfees2)
+#Although a relatively large number of observations are up to date, the proportion of dropouts in not up to date is extremely high
+```
+
+Gender
+```{r}
+plot_gender1 <- dropout |>
+  group_by(Gender, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=Gender, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Gender Distribution", y="Count")
+
+prop_gender <- dropout |> 
+  group_by(Gender, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(Gender) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_gender2 <- prop_gender |> 
+  ggplot(aes(x = Gender, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_gender$prop * prop_gender$count) / sum(prop_gender$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Gender Dropout Proportion", y="Proportion")
+prop_gender
+grid.arrange(plot_gender1,plot_gender2)
+#Males have a higher proportion of dropouts (just above 0.5). Does not seem significant
+```
+
+Scholarship Holder
+```{r}
+plot_scholarship1 <- dropout |>
+  group_by(`Scholarship holder`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Scholarship holder`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Scholarship Holder Distribution", y="Count")
+
+prop_scholarship <- dropout |> 
+  group_by(`Scholarship holder`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Scholarship holder`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_scholarship2 <- prop_scholarship |> 
+  ggplot(aes(x = `Scholarship holder`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_scholarship$prop * prop_scholarship$count) / sum(prop_scholarship$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Scholarship Holder Dropout Proportion", y="Proportion")
+prop_scholarship
+grid.arrange(plot_scholarship1,plot_scholarship2)
+#Both categories have a dropout proportion of about 0.5 and below
+```
+
+Age at Enrollment 
+```{r}
+plot_enrollmentage1 <- dropout |>
+  group_by(`Age at enrollment`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Age at enrollment`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Age At Enrollment Distribution", y="Count")
+plot_enrollmentage2 <- dropout |> 
+  dbplot_raster(x = `Age at enrollment`, y=isDropout, fill = n(), resolution = 10)
+
+prop_enrollmentage <- dropout |> 
+  group_by(`Age at enrollment`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Age at enrollment`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_enrollmentage3 <- prop_enrollmentage |> 
+  ggplot(aes(x = `Age at enrollment`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_enrollmentage$prop * prop_enrollmentage$count) / sum(prop_enrollmentage$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Age at Enrollment Dropout Proportion", y="Proportion")
+prop_enrollmentage
+grid.arrange(plot_enrollmentage1,plot_enrollmentage2,plot_enrollmentage3)
+#There is an increasing relationship between age at enrollment and proportion of dropout
+```
+
+International
+```{r}
+plot_international1 <- dropout |>
+  group_by(International, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=International, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="International Distribution", y="Count")
+
+prop_international <- dropout |> 
+  group_by(International, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(International) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_international2 <- prop_international |> 
+  ggplot(aes(x = International, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_international$prop * prop_international$count) / sum(prop_international$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="International Dropout Proportion", y="Proportion")
+prop_international
+grid.arrange(plot_international1,plot_international2)
+#Not significant since the proportion of dropouts are about 0.4 for both
+```
+
+Curricular units 1st sem (credited)
+```{r}
+plot_1stsem_credited1 <- dropout |>
+  group_by(`Curricular units 1st sem (credited)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 1st sem (credited)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 1st sem (credited) Distribution", y="Count")
+
+prop_1stsem_credited <- dropout |> 
+  group_by(`Curricular units 1st sem (credited)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 1st sem (credited)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_1stsem_credited2 <- prop_1stsem_credited |> 
+  ggplot(aes(x = `Curricular units 1st sem (credited)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_1stsem_credited$prop * prop_1stsem_credited$count) / sum(prop_1stsem_credited$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 1st Sem (Credited) Dropout Proportion", y="Proportion")
+prop_1stsem_credited
+grid.arrange(plot_1stsem_credited1,plot_1stsem_credited2)
+#The distributions of proportions of dropout are mostly below or around 0.5. No significance
+```
+
+Curricular units 1st sem (enrolled)
+```{r}
+plot_1stsem_enrolled1 <- dropout |>
+  group_by(`Curricular units 1st sem (enrolled)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 1st sem (enrolled)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 1st sem (enrolled) Distribution", y="Count")
+
+prop_1stsem_enrolled <- dropout |> 
+  group_by(`Curricular units 1st sem (enrolled)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 1st sem (enrolled)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_1stsem_enrolled2 <- prop_1stsem_enrolled |> 
+  ggplot(aes(x = `Curricular units 1st sem (enrolled)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_1stsem_enrolled$prop * prop_1stsem_enrolled$count) / sum(prop_1stsem_enrolled$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 1st Sem (Enrolled) Dropout Proportion", y="Proportion")
+prop_1stsem_enrolled
+grid.arrange(plot_1stsem_enrolled1,plot_1stsem_enrolled2)
+#The distributions of proportions of dropout are mostly below or around 0.5. No significance
+```
+
+Curricular units 1st sem (evaluations)
+```{r}
+plot_1stsem_evaluations1 <- dropout |>
+  group_by(`Curricular units 1st sem (evaluations)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 1st sem (evaluations)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 1st sem (evaluations) Distribution", y="Count")
+
+prop_1stsem_evaluations <- dropout |> 
+  group_by(`Curricular units 1st sem (evaluations)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 1st sem (evaluations)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_1stsem_evaluations2 <- prop_1stsem_evaluations |> 
+  ggplot(aes(x = `Curricular units 1st sem (evaluations)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_1stsem_evaluations$prop * prop_1stsem_evaluations$count) / sum(prop_1stsem_evaluations$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 1st Sem (Evaluations) Dropout Proportion", y="Proportion")
+prop_1stsem_evaluations
+grid.arrange(plot_1stsem_evaluations1,plot_1stsem_evaluations2)
+#0 evaluations somehow seems to have a high proportion of dropouts and high number of observations
+```
+
+Curricular units 1st sem (approved)
+```{r}
+plot_1stsem_approved1 <- dropout |>
+  group_by(`Curricular units 1st sem (approved)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 1st sem (approved)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 1st sem (approved) Distribution", y="Count")
+prop_1stsem_approved <- dropout |> 
+  group_by(`Curricular units 1st sem (approved)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 1st sem (approved)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_1stsem_approved2 <- prop_1stsem_approved |> 
+  ggplot(aes(x = `Curricular units 1st sem (approved)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_1stsem_approved$prop * prop_1stsem_approved$count) / sum(prop_1stsem_approved$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 1st Sem (Approved) Dropout Proportion", y="Proportion")
+prop_1stsem_approved
+grid.arrange(plot_1stsem_approved1,plot_1stsem_approved2)
+#3 and below have large proportions and seem to be significant
+```
+
+*Curricular units 1st sem (grade)*
+```{r}
+plot_1stsem_grade1 <- dropout |>
+  group_by(`Curricular units 1st sem (grade)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 1st sem (grade)`, y=n, color=Target))+
+  geom_point()+
+  labs(title="Curricular units 1st sem (grade) Distribution", y="Count")
+plot_1stsem_grade2 <- dropout |> 
+  dbplot_raster(x = `Curricular units 1st sem (grade)`, y=isDropout, fill = n(), resolution = 20)
+
+prop_1stsem_grade <- dropout |> 
+  group_by(`Curricular units 1st sem (grade)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 1st sem (grade)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+prop_1stsem_grade
+grid.arrange(plot_1stsem_grade1,plot_1stsem_grade2)
+
+```
+
+Curricular units 1st sem (without evaluations)
+```{r}
+plot_1stsem_woevaluations1 <- dropout |>
+  group_by(`Curricular units 1st sem (without evaluations)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 1st sem (without evaluations)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 1st sem (without evaluations) Distribution", y="Count")
+
+prop_1stsem_without_evaluations <- dropout |> 
+  group_by(`Curricular units 1st sem (without evaluations)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 1st sem (without evaluations)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_1stsem_woevaluations2 <- prop_1stsem_without_evaluations |> 
+  ggplot(aes(x = `Curricular units 1st sem (without evaluations)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_1stsem_without_evaluations$prop * prop_1stsem_without_evaluations$count) / sum(prop_1stsem_without_evaluations$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 1st Sem (Evaluations) Dropout Proportion", y="Proportion")
+prop_1stsem_evaluations
+grid.arrange(plot_1stsem_woevaluations1,plot_1stsem_woevaluations2)
+#majority of observations are 0 without observations but there seems to be a increasing relationship
+```
+
+Curricular units 2nd sem (credited)
+```{r}
+plot_2ndsem_credited1 <- dropout |>
+  group_by(`Curricular units 2nd sem (credited)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 2nd sem (credited)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 2nd sem (credited) Distribution", y="Count")
+
+prop_2ndsem_credited <- dropout |> 
+  group_by(`Curricular units 2nd sem (credited)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 2nd sem (credited)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_2ndsem_credited2 <- prop_2ndsem_credited |> 
+  ggplot(aes(x = `Curricular units 2nd sem (credited)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_2ndsem_credited$prop * prop_2ndsem_credited$count) / sum(prop_2ndsem_credited$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 2nd Sem (Credited) Dropout Proportion", y="Proportion")
+prop_2ndsem_credited
+grid.arrange(plot_2ndsem_credited1,plot_2ndsem_credited2)
+#The distributions of proportions of dropout are mostly below or around 0.5. No significance
+```
+
+Curricular units 2nd sem (enrolled)
+```{r}
+plot_2ndsem_enrolled1 <- dropout |>
+  group_by(`Curricular units 2nd sem (enrolled)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 2nd sem (enrolled)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 2nd sem (enrolled) Distribution", y="Count")
+
+prop_2ndsem_enrolled <- dropout |> 
+  group_by(`Curricular units 2nd sem (enrolled)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 2nd sem (enrolled)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_2ndsem_enrolled2 <- prop_2ndsem_enrolled |> 
+  ggplot(aes(x = `Curricular units 2nd sem (enrolled)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_2ndsem_enrolled$prop * prop_2ndsem_enrolled$count) / sum(prop_2ndsem_enrolled$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 2nd Sem (Enrolled) Dropout Proportion", y="Proportion")
+prop_2ndsem_enrolled
+grid.arrange(plot_2ndsem_enrolled1,plot_2ndsem_enrolled2)
+#The distributions of proportions of dropout are mostly below or around 0.5. No significance
+```
+
+Curricular units 2nd sem (evaluations)
+```{r}
+plot_2ndsem_evaluations1 <- dropout |>
+  group_by(`Curricular units 2nd sem (evaluations)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 2nd sem (evaluations)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 2nd sem (evaluations) Distribution", y="Count")
+
+prop_2ndsem_evaluations <- dropout |> 
+  group_by(`Curricular units 2nd sem (evaluations)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 2nd sem (evaluations)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_2ndsem_evaluations2 <- prop_2ndsem_evaluations |> 
+  ggplot(aes(x = `Curricular units 2nd sem (evaluations)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_2ndsem_evaluations$prop * prop_2ndsem_evaluations$count) / sum(prop_2ndsem_evaluations$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 2nd Sem (Evaluations) Dropout Proportion", y="Proportion")
+prop_2ndsem_evaluations
+grid.arrange(plot_2ndsem_evaluations1,plot_2ndsem_evaluations2)
+#0 evaluations somehow seems to have a high proportion of dropouts and high number of observations
+```
+
+Curricular units 2nd sem (approved)
+```{r}
+plot_2ndsem_approved1 <- dropout |>
+  group_by(`Curricular units 2nd sem (approved)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 2nd sem (approved)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 2nd sem (approved) Distribution", y="Count")
+
+prop_2ndsem_approved <- dropout |> 
+  group_by(`Curricular units 2nd sem (approved)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 2nd sem (approved)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_2ndsem_approved2 <- prop_2ndsem_approved |> 
+  ggplot(aes(x = `Curricular units 2nd sem (approved)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_2ndsem_approved$prop * prop_2ndsem_approved$count) / sum(prop_2ndsem_approved$count), 
+    linetype = "dashed"
+  )
+prop_2ndsem_approved
+grid.arrange(plot_2ndsem_approved1,plot_2ndsem_approved2)
+#3 and below have large proportions and seem to be significant
+```
+
+*Curricular units 2nd sem (grade)*
+```{r}
+plot_2ndsem_grade1 <- dropout |>
+  group_by(`Curricular units 2nd sem (grade)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 2nd sem (grade)`, y=n, color=Target))+
+  geom_point()+
+  labs(title="Curricular units 2nd sem (grade) Distribution", y="Count")
+plot_2ndsem_grade2 <- dropout |> 
+  dbplot_raster(x = `Curricular units 2nd sem (grade)`, y=isDropout, fill = n(), resolution = 20)
+
+prop_2ndsem_grade <- dropout |> 
+  group_by(`Curricular units 2nd sem (grade)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 2nd sem (grade)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+prop_2ndsem_grade
+grid.arrange(plot_2ndsem_grade1,plot_2ndsem_grade2)
+
+```
+
+Curricular units 2nd sem (without evaluations)
+```{r}
+plot_2ndsem_woevaluations1 <- dropout |>
+  group_by(`Curricular units 2nd sem (without evaluations)`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Curricular units 2nd sem (without evaluations)`, y=n, fill=Target))+
+  geom_col(size = 1)+
+  labs(title="Curricular units 2nd sem (without evaluations) Distribution", y="Count")
+
+prop_2ndsem_without_evaluations <- dropout |> 
+  group_by(`Curricular units 2nd sem (without evaluations)`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Curricular units 2nd sem (without evaluations)`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_2ndsem_woevaluations2 <- prop_2ndsem_without_evaluations |> 
+  ggplot(aes(x = `Curricular units 2nd sem (without evaluations)`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_2ndsem_without_evaluations$prop * prop_2ndsem_without_evaluations$count) / sum(prop_2ndsem_without_evaluations$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Curricular Units 2nd Sem (Evaluations) Dropout Proportion", y="Proportion")
+prop_2ndsem_evaluations
+grid.arrange(plot_2ndsem_woevaluations1,plot_2ndsem_woevaluations2)
+#majority of observations are 0 without observations but there seems to be a increasing relationship
+```
+
+Unemployment Rate
+```{r}
+plot_unemployment1 <- dropout |>
+  group_by(`Unemployment rate`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Unemployment rate`, y=n, color=Target))+
+  geom_line()+
+  labs(title="Unemployment rate Distribution", y="Count")
+plot_unemployment2 <- dropout |> 
+  dbplot_raster(x = `Unemployment rate`, y=isDropout, fill = n(), resolution = 20)
+
+prop_unemployment <- dropout |> 
+  group_by(`Unemployment rate`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Unemployment rate`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_unemployment3 <- prop_unemployment |> 
+  ggplot(aes(x = `Unemployment rate`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_unemployment$prop * prop_unemployment$count) / sum(prop_unemployment$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Unemployment Rate Dropout Proportion", y="Proportion")
+prop_unemployment
+grid.arrange(plot_unemployment1,plot_unemployment2,plot_unemployment3)
+#The categories all have dropout proportions below 0.5
+```
+
+Inflation Rate
+```{r}
+plot_inflation1 <- dropout |>
+  group_by(`Inflation rate`, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=`Inflation rate`, y=n, color=Target))+
+  geom_line()+
+  labs(title="Inflation rate Distribution", y="Count")
+plot_inflation2 <- dropout |> 
+  dbplot_raster(x = `Inflation rate`, y=isDropout, fill = n(), resolution = 20)
+
+prop_inflation <- dropout |> 
+  group_by(`Inflation rate`, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(`Inflation rate`) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_inflation3 <- prop_inflation |> 
+  ggplot(aes(x = `Inflation rate`, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_inflation$prop * prop_inflation$count) / sum(prop_inflation$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="Inflation Rate Dropout Proportion", y="Proportion")
+prop_inflation
+grid.arrange(plot_inflation1,plot_inflation2,plot_inflation3)
+#The categories all have dropout proportions below 0.5
+```
+
+GDP
+```{r}
+plot_gdp1 <- dropout |>
+  group_by(GDP, Target) |>
+  summarise(n=n()) |>
+  ggplot(aes(x=GDP, y=n, color=Target))+
+  geom_line()+
+  labs(title="GDP Distribution", y="Count")
+plot_gdp2 <- dropout |> 
+  dbplot_raster(x = GDP, y=isDropout, fill = n(), resolution = 20)
+
+prop_GDP <- dropout |> 
+  group_by(GDP, isDropout) |>  
+  summarize(n = n()) |>  
+  group_by(GDP) |> 
+  summarize(count = sum(n), prop = sum(isDropout * n) / sum(n)) |>  
+  mutate(se = sqrt(prop * (1-prop) / count)) |>  
+  collect()
+plot_gdp3 <- prop_GDP |> 
+  ggplot(aes(x = GDP, y = prop)) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = prop - 1.96 * se, ymax = prop + 1.96 * se),
+    width = 0.1
+  ) +
+  geom_hline(
+    yintercept = sum(prop_GDP$prop * prop_GDP$count) / sum(prop_GDP$count), 
+    linetype = "dashed"
+  ) +
+  labs(title="GDP Dropout Proportion", y="Proportion")
+prop_GDP
+grid.arrange(plot_gdp1,plot_gdp2,plot_gdp3)
+#The categories all have dropout proportions below 0.5
+```
+
+Correlation
+```{r}
+dropout_corr <- dropout |> 
+  select("Previous qualification (grade)",
+                         "Admission grade", "Age at enrollment",
+                         "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP") |>
+  ml_corr()
+dropout_corr <- round(dropout_corr,2)
+dropout_corr
+```
+
+
+
+
+
+
+
+Model 1: Use all columns
+Load Parquet File and Tidy up Data
+```{r}
+library(tidyr)
+library(dplyr)
+library(sparklyr)
+
+sc <- spark_connect(master = "local", version = "3.3.0")
+dropout <- spark_read_parquet(sc,
+                   name = "sdropout",
+                   path = paste0(getwd(), "/dropout.parquet"),
+                   memory = FALSE)
+
+
+#Separate the data into Columns and Give Proper Headers
+dropout <- separate(dropout, col = colnames(dropout),
+                into = c("Marital status", "Application mode", "Application order",
+                         "Course","Daytime/evening attendance","Previous qualification",
+                         "Previous qualification (grade)","Nacionality",
+                         "Mother qualification", "Father qualification",
+                         "Mother occupation", "Father occupation",
+                         "Admission grade", "Displaced", "Educational special needs",
+                         "Debtor", "Tuition fees up to date", "Gender",
+                         "Scholarship holder", "Age at enrollment","International",
+                         "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP","Target"),
+         sep = ";")
+
+
+dropout <- dropout |>
+  mutate_at(c("Previous qualification (grade)","Admission grade", "Age at enrollment",
+              "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP"),
+              as.numeric)
+
+#Filter Out Enrolled & add isDropout
+dropout <- dropout |> 
+  filter(Target != "Enrolled")
+dropout <- dropout |> 
+  mutate(isDropout = as.numeric(Target == "Dropout")) 
+dropout
+
+#Number of observations removed (794/4424)
+library(dplyr)
+dropout |> 
+  group_by(Target) |> 
+  summarize(num = n())
+#Dropout = 1421 vs Graduate = 2209
+glimpse(dropout)
+```
+
+string indexer and one hot encoder
+```{r}
+dropout <- dropout |> 
+  ft_string_indexer(input_col = "Marital status", output_col = "Marital status_i") |>
+  ft_string_indexer(input_col = "Application mode", output_col = "Application mode_i") |>
+  ft_string_indexer(input_col = "Application order", output_col = "Application order_i") |>
+  ft_string_indexer(input_col = "Course", output_col = "Course_i") |>
+  ft_string_indexer(input_col = "Daytime/evening attendance", output_col = "Daytime/evening attendance_i") |>
+  ft_string_indexer(input_col = "Previous qualification", output_col = "Previous qualification_i") |>
+  ft_string_indexer(input_col = "Nacionality", output_col = "Nacionality_i") |>
+  ft_string_indexer(input_col = "Mother qualification", output_col = "Mother qualification_i") |>
+  ft_string_indexer(input_col = "Father qualification", output_col = "Father qualification_i") |>
+  ft_string_indexer(input_col = "Mother occupation", output_col = "Mother occupation_i") |>
+  ft_string_indexer(input_col = "Father occupation", output_col = "Father occupation_i") |>
+  ft_string_indexer(input_col = "Displaced", output_col = "Displaced_i") |>
+  ft_string_indexer(input_col = "Educational special needs", output_col = "Educational special needs_i") |>
+  ft_string_indexer(input_col = "Debtor", output_col = "Debtor_i") |>
+  ft_string_indexer(input_col = "Tuition fees up to date", output_col = "Tuition fees up to date_i") |>
+  ft_string_indexer(input_col = "Gender", output_col = "Gender_i") |>
+  ft_string_indexer(input_col = "Scholarship holder", output_col = "Scholarship holder_i") |>
+  ft_string_indexer(input_col = "International", output_col = "International_i") |>
+  ft_one_hot_encoder(
+    input_cols = c("Marital status_i", "Application mode_i", "Application order_i",
+                         "Course_i","Daytime/evening attendance_i","Previous qualification_i",
+                         "Nacionality_i",
+                         "Mother qualification_i", "Father qualification_i",
+                         "Mother occupation_i", "Father occupation_i",
+                         "Displaced_i", "Educational special needs_i",
+                         "Debtor_i", "Tuition fees up to date_i", "Gender_i",
+                         "Scholarship holder_i", "International_i"),
+    output_cols = c("Marital status_e", "Application mode_e", "Application order_e",
+                         "Course_e","Daytime/evening attendance_e","Previous qualification_e",
+                         "Nacionality_e",
+                         "Mother qualification_e", "Father qualification_e",
+                         "Mother occupation_e", "Father occupation_e",
+                         "Displaced_e", "Educational special needs_e",
+                         "Debtor_e", "Tuition fees up to date_e", "Gender_e",
+                         "Scholarship holder_e", "International_e"))
+```
+
+Pipeline with standardisation
+```{r}
+pipeline <- ml_pipeline(sc) |> 
+  ft_vector_assembler(
+    input_cols = c("Previous qualification (grade)", "Admission grade", "Age at enrollment",
+                         "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP"),
+    output_col = "features"
+  ) |> 
+  ft_standard_scaler(
+    input_col = "features", 
+    output_col = "features_scaled", 
+    with_mean = TRUE
+  ) |>
+  ft_vector_assembler(
+    input_cols = c("features_scaled", "Marital status_e", "Application mode_e", "Application order_e",
+                         "Course_e","Daytime/evening attendance_e","Previous qualification_e",
+                         "Nacionality_e",
+                         "Mother qualification_e", "Father qualification_e",
+                         "Mother occupation_e", "Father occupation_e",
+                         "Displaced_e", "Educational special needs_e",
+                         "Debtor_e", "Tuition fees up to date_e", "Gender_e",
+                         "Scholarship holder_e", "International_e"),
+    output_col = "features_scaledall"
+    ) |>
+  ml_logistic_regression(
+    features_col = "features_scaledall", 
+    label_col = "isDropout",
+)
+
+```
+
+Split training and testing set for pipeline
+```{r}
+dropout_split <- dropout |>
+  sdf_random_split(training = 0.8, testing = 0.2, seed = 888)
+dropout_train <- dropout_split$training
+dropout_test <- dropout_split$testing
+
+pipeline_model <- ml_fit(pipeline, dropout_train)
+
+predictions <- ml_transform(pipeline_model, dataset = dropout_test)
+
+sdf_crosstab(predictions, "isDropout", "prediction")
+
+predictions |> 
+  ml_binary_classification_evaluator(
+    label_col = "isDropout",
+    prediction_col  = "prediction",
+    metric_name = "areaUnderROC"
+  )
+
+```
+
+cv selection for elastic net and lambda
+```{r}
+cv <- ml_cross_validator(
+  sc,
+  estimator = pipeline,
+  estimator_param_maps = list(
+    logistic_regression = list(
+      elastic_net_param = c(0.25,0.4,0.5,0.6,0.75,0.8,0.85),
+      reg_param = c(seq(0.001,0.01,by = 0.001)) 
+    )
+  ),
+  evaluator = ml_binary_classification_evaluator(
+    sc, 
+    label_col = "isDropout"
+  ),
+  num_folds = 10,
+  parallelism = 8,
+  seed = 888
+)
+
+cv_model <- ml_fit(cv, dropout_train)
+
+ml_validation_metrics(cv_model) |> 
+  arrange(desc(areaUnderROC))
+```
+
+Include best elastic net and lambda value into pipeline
+```{r}
+pipeline <- ml_pipeline(sc) |> 
+  ft_vector_assembler(
+    input_cols = c("Previous qualification (grade)", "Admission grade", "Age at enrollment",
+                         "Curricular units 1st sem (credited)",
+                         "Curricular units 1st sem (enrolled)",
+                         "Curricular units 1st sem (evaluations)",
+                         "Curricular units 1st sem (approved)",
+                         "Curricular units 1st sem (grade)",
+                         "Curricular units 1st sem (without evaluations)",
+                         "Curricular units 2nd sem (credited)",
+                         "Curricular units 2nd sem (enrolled)",
+                         "Curricular units 2nd sem (evaluations)",
+                         "Curricular units 2nd sem (approved)",
+                         "Curricular units 2nd sem (grade)",
+                         "Curricular units 2nd sem (without evaluations)",
+                         "Unemployment rate","Inflation rate","GDP"),
+    output_col = "features"
+  ) |> 
+  ft_standard_scaler(
+    input_col = "features", 
+    output_col = "features_scaled", 
+    with_mean = TRUE
+  ) |>
+  ft_vector_assembler(
+    input_cols = c("features_scaled", "Marital status_e", "Application mode_e", "Application order_e",
+                         "Course_e","Daytime/evening attendance_e","Previous qualification_e",
+                         "Nacionality_e",
+                         "Mother qualification_e", "Father qualification_e",
+                         "Mother occupation_e", "Father occupation_e",
+                         "Displaced_e", "Educational special needs_e",
+                         "Debtor_e", "Tuition fees up to date_e", "Gender_e",
+                         "Scholarship holder_e", "International_e"),
+    output_col = "features_scaledall"
+    ) |>
+  ml_logistic_regression(
+    features_col = "features_scaledall", 
+    label_col = "isDropout",
+    elastic_net_param = 0.75,
+    reg_param = 0.005
+)
+
+pipeline_modelbest <- ml_fit(pipeline, dropout_train)
+
+predictionsbest <- ml_transform(pipeline_modelbest, dataset = dropout_test)
+
+sdf_crosstab(predictionsbest, "isDropout", "prediction")
+
+predictionsbest |> 
+  ml_binary_classification_evaluator(
+    label_col = "isDropout",
+    prediction_col  = "prediction",
+    metric_name = "areaUnderROC"
+  )
+```
+
+
+
+
+
+
+
+Model 2: With selected columns 
+```{r}
+library(tidyr)
+library(sparklyr)
+
+#setwd("~/Desktop/Big Data Analytics/Project")
+data1 <- read.csv("data.csv")
+
+names(data1)
+sc <- spark_connect(master = "local", version = "3.3.0")
+dropout <- spark_read_csv(
+  sc,
+  names = "dropout",
+  path = paste0(getwd(), "/data.csv"),
+  memory = FALSE
+)
+
+spark_write_parquet(dropout, path = "dropout.parquet")
+
+#spark_disconnect(sc)
+```
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(sparklyr)
+
+sc <- spark_connect(master = "local", version = "3.3.0")
+dropout <- spark_read_parquet(sc,
+                   name = "sdropout",
+                   path = paste0(getwd(), "/dropout.parquet"),
+                   memory = TRUE)
+
+
+#Seperate the data into Columns and Give Proper Headers
+dropout <- separate(dropout, col = colnames(dropout),
+                into = c("MaritalStatus", "ApplicationMode", "ApplicationOrder",
+                         "Course","Daytime_evening_Attendance","PreviousQualification",
+                         "Previous_Qualification","Nationality",
+                         "MotherQualification", "FatherQualification",
+                         "MotherOccupation", "FatherOccupation",
+                         "AdmissionGrade", "Displaced", "Educational_Special_Needs",
+                         "Debtor", "Tuition_fees_up_to_date", "Gender",
+                         "Scholarship_holder", "Age_at_enrollment","International",
+                         "Credited_1sem","Enrolled_1sem",
+                         "Evaluation_1sem",
+                         "Approved_1sem",
+                         "Grade_1sem",
+                         "Without_Evaluation_1sem",
+                         "Credited_2sem",
+                         "Enrolled_2sem",
+                         "Evaluation_2sem",
+                         "Approved_2sem",
+                         "Credited_2sem",
+                         "Without_Evaluation_2sem",
+                         "Unemployment_rate","Inflation_rate","GDP","Target"),
+         sep = ";")
+glimpse(dropout)
+```
+
+```{r}
+dropout <- dropout |> 
+  filter(Target != "Enrolled")
+
+dropout <- dropout |> 
+  mutate(
+    isDropout = as.numeric(Target == "Dropout"),
+    AdmissionGrade=as.numeric(AdmissionGrade),
+    Age_at_enrollment=as.numeric(Age_at_enrollment),
+    
+    #Combine units
+    Credited_1sem=as.numeric(Credited_1sem),
+    Credited_2sem=as.numeric(Credited_2sem),
+    Credited_units=Credited_1sem+Credited_2sem,
+    Enrolled_1sem=as.numeric(Enrolled_1sem),
+    Enrolled_2sem=as.numeric(Enrolled_2sem),
+    Enrolled_units=Enrolled_1sem+Enrolled_2sem,
+    Evaluation_1sem=as.numeric(Evaluation_1sem),
+    Evaluation_2sem=as.numeric(Evaluation_2sem),
+    Evaluation_units=Evaluation_1sem+Evaluation_2sem,
+    Approved_1sem=as.numeric(Approved_1sem),
+    Approved_2sem=as.numeric(Approved_2sem),
+    Approved_units=Approved_1sem+Approved_2sem,
+    Without_Evaluation_1sem =as.numeric(Without_Evaluation_1sem ),
+    Without_Evaluation_2sem =as.numeric(Without_Evaluation_2sem ),
+    Without_Evaluation_units=Without_Evaluation_1sem+Without_Evaluation_2sem,
+  )
+glimpse(dropout)
+```
+By checking the balance of the dataset to make sure our data is a good to used in a model would generate higher accuracy,
+for a classification model
+```{r}
+dropout|>
+  group_by(isDropout)|>
+  summarize(num_ppl=n())|>
+  mutate(percent=num_ppl/sum(num_ppl))
+```
+Summary statistic in curricular units
+```{r}
+dropout |> 
+  sdf_describe(cols=c("Credited_units","Enrolled_units","Evaluation_units","Approved_units","Without_Evaluation_units"))
+```
+
+
+```{r}
+dropout<- dropout|>
+  select("MaritalStatus","ApplicationMode","Course",
+                         "MotherQualification", "FatherQualification",
+                         "MotherOccupation", "FatherOccupation",
+                         "Debtor", "Tuition_fees_up_to_date",
+                         "Age_at_enrollment","Credited_units",
+                         "Enrolled_units","Evaluation_units","Approved_units","Without_Evaluation_units","isDropout")
+glimpse(dropout)
+```
+
+```{r}
+glimpse(dropout)
+```
+
+
+```{r}
+dropout<-dropout |> 
+  mutate_at(vars(MaritalStatus,ApplicationMode,Course,MotherQualification,FatherQualification,
+                 MotherOccupation,FatherOccupation,Debtor,Tuition_fees_up_to_date),as.numeric)
+
+
+glimpse(dropout)
+```
+```{r}
+dropout<- dropout|>
+  ft_string_indexer(input_col = "MaritalStatus", output_col = "MaritalStatus_i") |>
+  ft_string_indexer(input_col = "ApplicationMode", output_col = "ApplicationMode_i") |>
+  ft_string_indexer(input_col = "Course", output_col = "Course_i") |>
+  ft_string_indexer(input_col = "MotherQualification", output_col = "MotherQualification_i") |>
+  ft_string_indexer(input_col = "FatherQualification", output_col = "FatherQualification_i") |>
+  ft_string_indexer(input_col = "MotherOccupation", output_col = "MotherOccupation_i") |>
+  ft_string_indexer(input_col = "FatherOccupation", output_col = "FatherOccupation_i") |>
+  ft_string_indexer(input_col = "Debtor", output_col = "Debtor_i") |>
+  ft_string_indexer(input_col = "Tuition_fees_up_to_date", output_col = "Tuition_fees_up_to_date_i") |>
+  ft_one_hot_encoder(
+    input_cols = c("MaritalStatus_i","ApplicationMode_i","Course_i","MotherQualification_i",
+                   "FatherQualification_i","MotherOccupation_i","FatherOccupation_i","Debtor_i","Tuition_fees_up_to_date_i"),
+    output_cols = c("MaritalStatus_e","ApplicationMode_e","Course_e","MotherQualification_e",
+                   "FatherQualification_e","MotherOccupation_e","FatherOccupation_e","Debtor_e","Tuition_fees_up_to_date_e")
+    )
+```
+
+```{r}
+pipeline <- ml_pipeline(sc)|>
+  ft_vector_assembler(
+      input_cols=c("Age_at_enrollment",
+                   "Credited_units","Enrolled_units","Evaluation_units","Approved_units","Without_Evaluation_units"),
+      output_col = "features"
+
+  ) |> 
+  ft_standard_scaler(
+    input_col = "features",
+    output_col = "feature_scaled",
+    with_mean=TRUE
+  ) |>
+  ft_vector_assembler(
+    input_cols = c("feature_scaled","MaritalStatus_e","ApplicationMode_e","Course_e","MotherQualification_e",
+                   "FatherQualification_e","MotherOccupation_e","FatherOccupation_e","Debtor_e","Tuition_fees_up_to_date_e"),
+    output_col = "feature_scaled_all"
+  )|>
+  ml_logistic_regression(
+    features_col = "feature_scaled_all",
+    label_col="isDropout",
+    elastic_net_param=0.75,
+    reg_param=0.001	
+  )
+pipeline
+```
+
+
+
+```{r}
+folds <-dropout |> 
+  sdf_random_split(training = 0.8, testing = 0.2, seed =888)
+
+training_df <- folds$training
+test_df<- folds$testing
+
+```
+
+```{r}
+glimpse(training_df)
+```
+
+```{r}
+cv <- ml_cross_validator(
+  sc,
+  estimator = pipeline,
+  estimator_param_maps = list(
+    logistic_regression = list(
+      elastic_net_param = c(0.25, 0.75),
+      reg_param = c(0.001, 0.01) 
+    )
+  ),
+  evaluator = ml_binary_classification_evaluator(
+    sc, 
+    label_col = "isDropout"
+  ),
+  num_folds = 10,
+  parallelism = 1,
+  seed = 1337
+)
+
+cv_model <- ml_fit(cv, training_df)
+```
+
+```{r}
+ml_validation_metrics(cv_model) |> 
+  arrange(desc(areaUnderROC))
+```
+
+
+```{r}
+pipeline_model<-ml_fit(pipeline,training_df)
+pipeline_model
+```
+
+```{r}
+predictions <- ml_transform(pipeline_model,test_df)
+glimpse(predictions)
+```
+
+```{r}
+predictions |> 
+  ml_binary_classification_evaluator(
+    label_col = "isDropout",
+    prediction_col  = "prediction",
+    metric_name = "areaUnderROC"
+)
+```
+
