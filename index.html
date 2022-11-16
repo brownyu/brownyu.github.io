@@ -102,7 +102,7 @@
         To find the best hyperparameter value, α and lambda, for the elastic net regularisation, we made use of ml_cross_validator() to perform 10 folds CV and tested a range of values elastic_net_param = c(0.25,0.4,0.5,0.6,0.75,0.8,0.85), and reg_param = c(seq(0.001,0.01,by = 0.001)) on the training set. We then evaluate and select the best combination of hyperparameter values with the highest ROC. From our results, the best combination is elastic_net_param = 0.75, with reg_param = 0.005. The area under ROC for this selected elastic net regularised logistic regression model is 0.9459816</p>
     <h5>Model with selected variables</h5>
     <p> Further data wrangling in this model by summation various curricular units from two semesters together. Cross-validation and elastic net regularization is also used in this model, to tune the best parameters. The model has an area under ROC of 0.9494767 in testing data </p>
-    <h4>Conclusion</h4>
+    <h4>6.Conclusion</h4>
     <p>By comparing these three models, we think the last model is the best model with highest ROC value</p>
 
 </body>
