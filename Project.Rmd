@@ -1713,14 +1713,6 @@ glimpse(dropout)
 
 
 ```{r}
-dropout<-dropout |> 
-  mutate_at(vars(MaritalStatus,ApplicationMode,Course,MotherQualification,FatherQualification,
-                 MotherOccupation,FatherOccupation,Debtor,Tuition_fees_up_to_date),as.numeric)
-
-
-glimpse(dropout)
-```
-```{r}
 dropout<- dropout|>
   ft_string_indexer(input_col = "MaritalStatus", output_col = "MaritalStatus_i") |>
   ft_string_indexer(input_col = "ApplicationMode", output_col = "ApplicationMode_i") |>
@@ -1826,5 +1818,27 @@ predictions |>
     prediction_col  = "prediction",
     metric_name = "areaUnderROC"
 )
+```
+```{r}
+predictions |> 
+  ml_classification_eval(
+    label_col = "isDropout",
+    prediction_col  = "prediction",
+    metric_name = "weightedPrecision"
+)
+```
+```{r}
+predictions |> 
+  ml_classification_eval(
+    label_col = "isDropout",
+    prediction_col  = "prediction",
+    metric_name = "weightedRecall"
+)
+```
+
+
+
+```{r}
+sdf_crosstab(predictions, "isDropout", "prediction")
 ```
 
