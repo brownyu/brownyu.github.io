@@ -1502,7 +1502,7 @@ predictions |>
   )
 
 ```
-
+Model 2 
 cv selection for elastic net and lambda
 ```{r}
 cv <- ml_cross_validator(
@@ -1592,27 +1592,7 @@ predictionsbest |>
 
 
 
-Model 2: With selected columns 
-```{r}
-library(tidyr)
-library(sparklyr)
-
-#setwd("~/Desktop/Big Data Analytics/Project")
-data1 <- read.csv("data.csv")
-
-names(data1)
-sc <- spark_connect(master = "local", version = "3.3.0")
-dropout <- spark_read_csv(
-  sc,
-  names = "dropout",
-  path = paste0(getwd(), "/data.csv"),
-  memory = FALSE
-)
-
-spark_write_parquet(dropout, path = "dropout.parquet")
-
-#spark_disconnect(sc)
-```
+Model 3: With selected columns 
 
 ```{r}
 library(tidyr)
@@ -1819,24 +1799,6 @@ predictions |>
     metric_name = "areaUnderROC"
 )
 ```
-```{r}
-predictions |> 
-  ml_classification_eval(
-    label_col = "isDropout",
-    prediction_col  = "prediction",
-    metric_name = "weightedPrecision"
-)
-```
-```{r}
-predictions |> 
-  ml_classification_eval(
-    label_col = "isDropout",
-    prediction_col  = "prediction",
-    metric_name = "weightedRecall"
-)
-```
-
-
 
 ```{r}
 sdf_crosstab(predictions, "isDropout", "prediction")
