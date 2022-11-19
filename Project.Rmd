@@ -7,17 +7,6 @@ title: "Big Data Code"
 output: html_document
 date: "2022-11-14"
 ---
-
-
-
-
-
----
-title: "Project R Codes"
-output: html_document
-date: "2022-10-09"
----
-
 Converting csv file downloaded into parquet
 ```{r}
 library(tidyr)
@@ -46,11 +35,8 @@ spark_disconnect(sc)
 
 Load Parquet File and Tidy up Data
 ```{r}
-library(tidyr)
-library(sparklyr)
 library(dplyr)
 
-setwd("C:/Users/Eugene Wong/Desktop/SMU/Big Data/Project")
 sc <- spark_connect(master = "local", version = "3.3.0")
 dropout <- spark_read_parquet(sc,
                    name = "dropout",
